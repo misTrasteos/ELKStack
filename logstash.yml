@@ -1,0 +1,70 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: logstash-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: logstash
+  template:
+    metadata:
+      labels:
+        app: logstash
+    spec:
+      containers:
+      - name: logstash
+        image: docker.elastic.co/logstash/logstash:6.8.7
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 5044
+        volumeMounts:
+        - name: logstash-volume
+          mountPath: /usr/share/logstash/pipeline/logstash.conf
+          subPath: logstash.conf
+      volumes:
+      - name: logstash-volume
+        configMap:
+          name: logstash-configmap        
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: logstash-service
+spec:
+  selector:
+    app: logstash
+  ports:
+  - protocol: TCP
+    port: 5044
+    targetPort: 5044
+---
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: logstash-configmap
+data:
+  logstash.conf: |-
+    input{
+      beats{
+        port => 5044
+      }
+    }
+
+    filter{
+      grok{
+        match => { "message" => "%{TIMESTAMP_ISO8601:originalTimestamp},%{WORD:exception}" }
+      }
+      date {
+        match => [ "originalTimestamp", "yyyy-MM-dd HH:mm:ss" ]
+      }
+    }
+
+    output{
+      elasticsearch {
+        index => "randomlogs-%{+yyyy.MM.dd}-index"
+        hosts => [ "elastic-service:9200" ]
+      }
+    }
+
+# https://www.elastic.co/guide/en/logstash/current/plugins-filters-date.html

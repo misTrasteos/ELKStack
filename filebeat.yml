@@ -1,0 +1,49 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: filebeat-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: filebeat
+  template:
+    metadata:
+      labels:
+        app: filebeat
+    spec:
+      containers:
+      - name: filebeat
+        image: docker.elastic.co/beats/filebeat:6.8.7
+        imagePullPolicy: IfNotPresent
+        volumeMounts:
+        - name: filebeat-volume
+          mountPath: /usr/share/filebeat/filebeat.yml
+          subPath: filebeat.yml
+        - name: log-files
+          mountPath: /logs
+      volumes:
+      - name: filebeat-volume
+        configMap:
+          name: filebeat-configmap
+      - name: log-files
+        hostPath:
+          path: /logs
+---
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: filebeat-configmap
+data:
+  filebeat.yml: |-
+    filebeat.inputs:
+    - type: log
+      enabled: true
+      paths:
+        - /logs/log.log
+      fields:
+        origin: log.log
+      fields_under_root: true
+
+    output.logstash:
+      hosts: ["logstash-service:5044"]
